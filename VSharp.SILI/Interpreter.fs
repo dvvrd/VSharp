@@ -254,7 +254,7 @@ module internal Interpreter =
             ControlFlow.ComposeSequentially result result' state state' |> k))
         let k = Enter caller state k
         if metadataMethod.IsInternalCall then
-            // TODO: internal calls should pass throught CallGraph.call too
+            // TODO: internal calls should pass throught CallGraph.call too?
             printLog Trace "INTERNAL CALL OF %s.%s" ast.MetadataMethod.DeclaringType.AssemblyQualifiedName metadataMethod.Name
             let fullMethodName = DecompilerServices.metadataMethodToString metadataMethod
             if externalImplementations.ContainsKey(fullMethodName) then
@@ -1337,7 +1337,7 @@ module internal Interpreter =
         __notImplemented__() // TODO: [C#] __reftype(_) = [IL] refanytype
 
     and reduceRefTypeTokenExpression state (ast : IRefTypeTokenExpression) k =
-        __notImplemented__() // TODO: what is it?
+        __notImplemented__() // TODO: what is this?
 
     and reduceRefValueExpression state (ast : IRefValueExpression) k =
         __notImplemented__() // TODO: [C#] __refvalue(_) = [IL] refanyval

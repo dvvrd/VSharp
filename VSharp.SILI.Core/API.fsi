@@ -38,6 +38,8 @@ module API =
         val Constant : string -> ISymbolicConstantSource -> termType -> term
         val Expression : operation -> term list -> termType -> term
         val Struct : symbolicHeap -> termType -> term
+        val HeapRef : (term * termType) nonEmptyList -> timestamp transparent -> arrayReferenceTarget -> termType -> term
+        val StaticRef : string -> (term * termType) list -> termType option -> term
         val Union : (term * term) list -> term
 
         val True : term
@@ -54,6 +56,8 @@ module API =
         val (|Lambda|_|) : termNode -> 'a symbolicLambda option
         val (|LazyInstantiation|_|) : ISymbolicConstantSource -> (term * generalizedHeap option * bool) option
         val (|RecursionOutcome|_|) : ISymbolicConstantSource -> (IFunctionIdentifier * state * term option * bool) option
+        val (|StaticsInitializedSource|_|) : ISymbolicConstantSource -> (generalizedHeap * term) option
+        val (|SymbolicSubtypeSource|_|) : ISymbolicConstantSource -> (termType * termType) option
         val (|Conjunction|_|) : term -> term list option
         val (|Disjunction|_|) : term -> term list option
 

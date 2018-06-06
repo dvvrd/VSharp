@@ -2,25 +2,38 @@ namespace VSharp
 
 open VSharp.Core
 
-type hoRelation = string
-type relation = { id : string; signature : termType list }
+type foRelation =
+    { id : string; signature : termType list } with
+    override x.ToString() = x.id
+type soRelation =
+    { foRel : foRelation; relArgs : termType list list } with
+    override x.ToString() = x.foRel.id
 
-type higherOrderArg = hoRelation list
-
-type hoRelationalApplication =
-    { symbol : hoRelation; hoRel : higherOrderArg option; args : term list } with
+type relArg =
+    | FoArg of foRelation
+    | SoArg of soRelation * foRelation list * term list
     override x.ToString() =
-        let hoRel = Option.map (List.map toString >> join " ⚪ ") x.hoRel
-        let args = x.args |> List.map toString |> join ", "
-        match hoRel with
-        | Some hoRel -> sprintf "%O(%s, %s)" x.symbol hoRel args
-        | None -> sprintf "%O(%s)" x.symbol args
+        match x with
+        | FoArg arg -> arg.id
+        | SoArg(so, sos, fos) ->
+            so.foRel.id::(List.append (sos |> List.map (fun f -> f.id)) (List.map toString fos)) |> join " " |> sprintf "[%s]"
+    member x.Args =
+        match x with
+        | FoArg _ -> []
+        | SoArg(_, _, args)-> args
 
-type relationalApplication =
-    { symbol : relation; args : term list } with
+type foRelationalApplication =
+    { symbol : foRelation; args : term list } with
     override x.ToString() =
         let args = x.args |> List.map toString |> join ", "
         sprintf "%s(%s)" x.symbol.id args
+
+type soRelationalApplication =
+    { symbol : soRelation; relArgs : relArg list; args : term list } with
+    override x.ToString() =
+        let soArgs = x.relArgs |> List.map toString
+        let foArgs = x.args |> List.map toString
+        sprintf "%O(%s)" x.symbol (List.append soArgs foArgs |> join ", ")
 
 type 'a CHC =
     { constraints : term list; body : 'a list; head : 'a option } with
@@ -34,23 +47,27 @@ type 'a CHC =
         let body = List.append constraints apps
         sprintf "%s :- %s" head (join ", " body)
 
-type 'a CHCSystem = 'a list
+type FOCHC = foRelationalApplication CHC
+type SOCHC = soRelationalApplication CHC
 
-type HOCHC = hoRelationalApplication CHC
-type CHC = relationalApplication CHC
-type HOCHCSystem = HOCHC CHCSystem
-type CHCSystem = CHC CHCSystem
+type 'a CHCSystem = 'a list
+type FOCHCSystem = FOCHC CHCSystem
+type SOCHCSystem = SOCHC CHCSystem
 
 module CHCs =
-    let private rel2FO rel args =
-        { id = rel; signature = List.map TypeOf args }
 
-    let private app2FO (hoapp : hoRelationalApplication) : relationalApplication =
-        assert(hoapp.hoRel.IsNone)
-        { symbol = rel2FO hoapp.symbol hoapp.args; args = hoapp.args }
+    let dump chcs = chcs |> List.map toString |> join "\n\n"
 
-    let private chc2FO (hochc : HOCHC) : CHC =
-        { constraints = hochc.constraints; body = List.map app2FO hochc.body; head = Option.map app2FO hochc.head }
+    let private soRel2FoRel (rel : soRelation) =
+        if not rel.relArgs.IsEmpty then __notImplemented__()
+        assert(rel.relArgs.IsEmpty)
+        rel.foRel
 
-    let toFirstOrder (hoSys : HOCHCSystem) : CHCSystem =
-        List.map chc2FO hoSys
+    let private app2FO (soapp : soRelationalApplication) : foRelationalApplication =
+        { symbol = soRel2FoRel soapp.symbol; args = soapp.args }
+
+    let private chc2FO (sochc : SOCHC) : FOCHC =
+        { constraints = sochc.constraints; body = List.map app2FO sochc.body; head = Option.map app2FO sochc.head }
+
+    let toFirstOrder (sys : SOCHCSystem) : FOCHCSystem =
+        List.map chc2FO sys

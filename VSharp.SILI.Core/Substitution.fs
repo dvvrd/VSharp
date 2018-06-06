@@ -32,7 +32,7 @@ module Substitution =
             else
                 match op with
                 | Operator(op, isChecked) -> Operators.simplifyOperation term.metadata op isChecked t args' id
-                //TODO: this is temporary hack, support normal substitution cast expression
+                // TODO: this is temporary hack, support normal substitution cast expression
                 | Cast _ -> Expression term.metadata op args' t
                 | Application _ -> __notImplemented__())
             |> Merging.merge

@@ -57,15 +57,20 @@ module internal Common =
 
     // TODO: support composition for this constant source
     [<StructuralEquality;NoComparison>]
-    type private SymbolicSubtypeSource =
+    type private symbolicSubtypeSource =
         {left : termType; right : termType}
         interface ISymbolicConstantSource with
             override x.SubTerms = Seq.empty
 
+    let (|SymbolicSubtypeSource|_|) (src : ISymbolicConstantSource) =
+        match src with
+        | :? symbolicSubtypeSource as li -> Some(li.left, li.right)
+        | _ -> None
+
     let rec is metadata leftType rightType =
         let subtypeName lname rname = sprintf  "(%s <: %s)" lname rname
         let makeBoolConst lname rname leftTermType rightTermType =
-            Constant metadata (subtypeName lname rname) ({left = leftTermType; right = rightTermType} : SymbolicSubtypeSource) Bool
+            Constant metadata (subtypeName lname rname) ({left = leftTermType; right = rightTermType} : symbolicSubtypeSource) Bool
         match leftType, rightType with
         | _ when leftType = rightType -> makeTrue metadata
         | termType.Null, _

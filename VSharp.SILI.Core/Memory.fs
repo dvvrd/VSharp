@@ -266,10 +266,10 @@ module internal Memory =
                 | _ -> typeSuits locationValue
             if isConcrete addrEqual then addrEqual else addrEqual &&& typeEqual
 
-    let private findSuitableLocations mtd h keyMapper valueMapper (ptr : pointerInfo) =
+    let private findSuitableLocations mtd h mapper (ptr : pointerInfo) =
         let filterMapKey (k, cell) =
-            let k = keyMapper k
-            let cell = {cell with value = valueMapper cell.value}
+            let k = mapper k
+            let cell = {cell with value = mapper cell.value}
             let guard = canPoint mtd ptr.location ptr.typ ptr.time k cell.value cell.created
             match guard with
             | False -> None
@@ -296,7 +296,7 @@ module internal Memory =
 
 // ------------------------------- Core -------------------------------
 
-    let rec private accessTerm read metadata groundHeap guard update keyMapper valueMapper lazyInstantiator created modified ptrTime ptrFql path arrayMode term =
+    let rec private accessTerm read metadata groundHeap guard update mapper lazyInstantiator created modified ptrTime ptrFql path arrayMode term =
         match path with
         | [] ->
             let newTerm, newTime = update term modified
@@ -309,7 +309,7 @@ module internal Memory =
                 let ptr' = {location = key; fullyQualifiedLocation = fql'; typ = typ; time = ptrTime; path = path'; isTopLevel = false; arrayTarget = arrayMode}
                 let instantiator = if read then lazyInstantiator else genericLazyInstantiator term.metadata groundHeap modified fql' typ
                 let result, newFields, newTime =
-                    accessHeap read false metadata groundHeap guard update fields created keyMapper valueMapper instantiator ptr'
+                    accessHeap read false metadata groundHeap guard update fields created mapper instantiator ptr'
                 result, Struct term.metadata newFields t, newTime
             | Array(dimension, length, lower, constant, contents, lengths, arrTyp) ->
                 let fql' = referenceSubLocation location arrayMode ptrFql
@@ -319,7 +319,7 @@ module internal Memory =
                     let targetType = if read then Some(path |> List.last |> snd) else None
                     let doJob = lazy(Merging.guardedMap (fun c -> instantiator term.metadata realInstantiator targetType groundHeap modified fql' key c ()) constant)
                     doJob.Force
-                let newHeap heap instantiator = accessHeap read false metadata groundHeap guard update heap created keyMapper valueMapper instantiator ptr'
+                let newHeap heap instantiator = accessHeap read false metadata groundHeap guard update heap created mapper instantiator ptr'
                 match arrayMode with
                 | _ when arrayMode = ArrayContents || not (List.isEmpty path') ->
                     let instantiator = makeInstantiator key arrayElementLazyInstantiator
@@ -339,18 +339,18 @@ module internal Memory =
             | t ->
                 internalfailf "expected complex type, but got %O" t
 
-    and private accessHeap read restricted metadata groundHeap guard update h time keyMapper valueMapper lazyInstantiator (ptr : pointerInfo) =
+    and private accessHeap read restricted metadata groundHeap guard update h time mapper lazyInstantiator (ptr : pointerInfo) =
         let accessRec gvas lazyValue h =
             let gvs, (h', newTime) = gvas |> ((h, Timestamp.zero) |> List.mapFold (fun (h, maxTime) (guard', addr, cell) ->
                 let guard'' = guard &&& guard'
-                let accessedValue, newBaseValue, newTime = accessTerm read metadata groundHeap guard update keyMapper valueMapper lazyInstantiator cell.created cell.modified ptr.time ptr.fullyQualifiedLocation ptr.path ptr.arrayTarget cell.value
+                let accessedValue, newBaseValue, newTime = accessTerm read metadata groundHeap guard update mapper lazyInstantiator cell.created cell.modified ptr.time ptr.fullyQualifiedLocation ptr.path ptr.arrayTarget cell.value
                 let h' = if read || cell.value = newBaseValue then h else writeHeap newTime guard'' h addr newBaseValue
-                ((guard, accessedValue), (h', max maxTime newTime))))
+                ((guard'', accessedValue), (h', max maxTime newTime))))
             (Merging.merge (optCons gvs lazyValue), h', newTime)
         if isConcrete ptr.location && Heap.contains ptr.location h then
             accessRec [(makeTrue metadata, ptr.location, Heap.find ptr.location h)] None h
         else
-            let baseGav, restGavs = findSuitableLocations metadata h keyMapper valueMapper ptr
+            let baseGav, restGavs = findSuitableLocations metadata h mapper ptr
             match baseGav with
             | None when read && restricted ->
                 // TODO: undefined behaviour detected!
@@ -373,33 +373,33 @@ module internal Memory =
         let time = frameTime state location
         let cell, _ = stackDeref time (fun () -> (stackLazyInstantiator state time location).value) state location
         let termLazyInstantiator = if read && not (List.isEmpty path) then genericLazyInstantiator metadata None time (StackRef metadata location path) (path |> List.last |> snd) else __unreachable__
-        let accessedValue, newBaseValue, newTime = accessTerm read metadata None (makeTrue metadata) update id id termLazyInstantiator cell.created cell.modified time firstLocation path ArrayContents cell.value
+        let accessedValue, newBaseValue, newTime = accessTerm read metadata None (makeTrue metadata) update id termLazyInstantiator cell.created cell.modified time firstLocation path ArrayContents cell.value
         let newState = if read || cell.value = newBaseValue then state else writeStackLocation state location { cell with value = newBaseValue; modified = newTime }
         accessedValue, newState
 
-    let private commonHierarchicalHeapAccess read restricted update metadata groundHeap heap keyMapper valueMapper lazyInstantiator ((addr, t) as location) path time arrayMode =
+    let private commonHierarchicalHeapAccess read restricted update metadata groundHeap heap mapper lazyInstantiator ((addr, t) as location) path time arrayMode =
         let firstLocation = HeapRef metadata (location, []) arrayMode time t
         let typ' = if List.isEmpty path then t else path |> List.last |> snd
         let lazyInstantiator = lazyInstantiator |?? selectLazyInstantiator metadata groundHeap time.v arrayMode (HeapRef metadata (location, path) arrayMode time typ') typ'
         let ptr = {location = addr; fullyQualifiedLocation = firstLocation; typ = t; time = time.v; path = path; isTopLevel = true; arrayTarget = arrayMode}
-        accessHeap read restricted metadata groundHeap (makeTrue metadata) update heap Timestamp.zero keyMapper valueMapper lazyInstantiator ptr
+        accessHeap read restricted metadata groundHeap (makeTrue metadata) update heap Timestamp.zero mapper lazyInstantiator ptr
 
-    let private commonHierarchicalStaticsAccess read restricted update metadata groundHeap statics keyMapper valueMapper lazyInstantiator location path =
+    let private commonHierarchicalStaticsAccess read restricted update metadata groundHeap statics mapper lazyInstantiator location path =
         let addr = Terms.makeStringKey location
         let dnt = System.Type.GetType(location)
         let t = fromDotNetType dnt
         let lazyInstantiator = lazyInstantiator |?? genericLazyInstantiator metadata groundHeap Timestamp.zero (StaticRef metadata location path) (if path.IsEmpty then t else path |> List.last |> snd)
         let ptr = {location = addr; fullyQualifiedLocation = StaticRef metadata location []; typ = t; time = Timestamp.infinity; path = path; isTopLevel = true; arrayTarget = ArrayContents}
-        accessHeap read restricted metadata groundHeap (makeTrue metadata) update statics Timestamp.zero keyMapper valueMapper lazyInstantiator ptr
+        accessHeap read restricted metadata groundHeap (makeTrue metadata) update statics Timestamp.zero mapper lazyInstantiator ptr
 
     let mutateStack metadata state location path time value =
         commonHierarchicalStackAccess false (fun _ _ -> (value, time)) metadata state location path
 
     let private mutateHeap restricted metadata h location path time arrayTarget value =
-        commonHierarchicalHeapAccess false restricted (fun _  _ -> (value, time)) metadata None h id id None location path {v=time} arrayTarget
+        commonHierarchicalHeapAccess false restricted (fun _  _ -> (value, time)) metadata None h id None location path {v=time} arrayTarget
 
     let private mutateStatics restricted metadata statics location path time value =
-        commonHierarchicalStaticsAccess false restricted (fun _ _ -> (value, time)) metadata None statics id id None location path
+        commonHierarchicalStaticsAccess false restricted (fun _ _ -> (value, time)) metadata None statics id None location path
 
     let rec private independent (exploredRecursiveIds : ImmutableHashSet<IFunctionIdentifier>) (exploredLocations : ImmutableHashSet<term>) read funcId location : bool =
         exploredLocations.Contains(location) ||
@@ -412,19 +412,19 @@ module internal Memory =
             |_ -> false
         | None -> false
 
-    and private accessGeneralizedHeapRec (exploredIds : ImmutableHashSet<IFunctionIdentifier>) keyMapper valueMapper lazyInstantiator read getter location accessDefined = function
+    and private accessGeneralizedHeapRec (exploredIds : ImmutableHashSet<IFunctionIdentifier>) unlucky mapper lazyInstantiator read getter location accessDefined = function
         | Defined(r, h) ->
-            let result, heap, _ = accessDefined keyMapper valueMapper lazyInstantiator None r h
+            let result, heap, _ = accessDefined mapper lazyInstantiator None r h
             result, Defined r heap
         | Merged ghs ->
             let gs, hs = List.unzip ghs
-            let rs, hs' = hs |> List.map (accessGeneralizedHeapRec exploredIds keyMapper valueMapper lazyInstantiator read getter location accessDefined) |> List.unzip
+            let rs, hs' = hs |> List.map (accessGeneralizedHeapRec exploredIds unlucky mapper lazyInstantiator read getter location accessDefined) |> List.unzip
             let grs = List.zip gs rs
             Merging.merge grs, Merging.mergeGeneralizedHeaps gs hs'
         | Mutation(h, h') as m ->
-            let result, h'', _ = accessDefined keyMapper valueMapper lazyInstantiator (Some h) false h'
+            let result, h'', _ = accessDefined mapper lazyInstantiator (Some h) false h'
             if read then
-                let accessH = lazy(accessGeneralizedHeapRec exploredIds keyMapper valueMapper lazyInstantiator read getter location accessDefined h |> fst)
+                let accessH = lazy(accessGeneralizedHeapRec exploredIds unlucky mapper lazyInstantiator read getter location accessDefined h |> fst)
                 let simplifyInstantiated term =
                     match term.term with
                     | Constant(_, LazyInstantiation(loc, Some heap, _), _) when loc = location && heap = h ->
@@ -435,49 +435,54 @@ module internal Memory =
                 result, Mutation(h, h'')
         | Composition(_, _, Defined _) ->
             internalfail "composition with the defined heap should not be met, it must be simplified to a simple mutation!"
-        | Composition(s, ctx, h) when read ->
-            let keyMapper' = keyMapper >> fillHoles ctx s
-            let valueMapper' = valueMapper >> fillHoles ctx s
-            let lazyInstantiator' = lazy(accessGeneralizedHeapRec exploredIds keyMapper valueMapper lazyInstantiator read getter location accessDefined (getter s) |> fst)
-            accessGeneralizedHeapRec exploredIds keyMapper' valueMapper' (Some lazyInstantiator'.Force) read getter location accessDefined h
+        | Composition(s, ctx, h) as heap when read ->
+            let mapper' = mapper >> fillHoles ctx s
+            let unlucky _ = unlucky heap  // if simplification of 'h' fails then we should return 'heap' instead of 'h'
+            let lazyInstantiator' = lazy(accessGeneralizedHeapRec exploredIds unlucky mapper lazyInstantiator read getter location accessDefined (getter s) |> fst)
+            accessGeneralizedHeapRec exploredIds unlucky mapper' (Some lazyInstantiator'.Force) read getter location accessDefined h
         | RecursiveApplication(f, _, _) as h
                 when not <| exploredIds.Contains(f) && read &&
                      independent exploredIds ImmutableHashSet.Empty
-                                 (fun ids s -> accessGeneralizedHeapRec ids keyMapper valueMapper lazyInstantiator read getter location accessDefined (getter s)) f location ->
-            let r, _, _ = accessDefined keyMapper valueMapper lazyInstantiator None false Heap.empty
+                                 (fun ids s -> accessGeneralizedHeapRec ids unlucky mapper lazyInstantiator read getter location accessDefined (getter s)) f location ->
+            let r, _, _ = accessDefined mapper lazyInstantiator None false Heap.empty
             r, h
         | RecursiveApplication _
-        | HigherOrderApplication _ as h ->
-            let r, e, _ = accessDefined keyMapper valueMapper lazyInstantiator (Some h) false Heap.empty
-            r, if read then h else Mutation(h, e)
+        | HigherOrderApplication _ as h -> unlucky h
         | _ -> __unreachable__()
 
-    and private accessGeneralizedHeap = accessGeneralizedHeapRec ImmutableHashSet.Empty id id None
+    and private accessGeneralizedHeap read getter location accessDefined =
+        let unlucky h =
+            let r, e, _ = accessDefined id None (Some h) false Heap.empty
+            r, if read then h else Mutation(h, e)
+        accessGeneralizedHeapRec ImmutableHashSet.Empty unlucky id None read getter location accessDefined
 
-    and private hierarchicalAccess read actionNull updateDefined metadata state term =
+    and private hierarchicalAccess validate read actionNull updateDefined metadata state term =
         match term.term with
         | Error _ -> (term, state)
         | StackRef(location, path, None) ->
             commonHierarchicalStackAccess read updateDefined metadata state location path
         | HeapRef(((addr, t) as location, path), time, arrayMode, Reference _) ->
-            Common.statedConditionalExecution state
-                (fun state k -> k (Arithmetics.simplifyEqual metadata addr (Concrete metadata [0] pointerType) id, state))
-                (fun state k -> k (actionNull metadata state t))
-                (fun state k ->
-                    let accessDefined keyMapper valueMapper lazyInstantiator groundHeap r h =
-                        commonHierarchicalHeapAccess read r updateDefined metadata groundHeap h keyMapper valueMapper lazyInstantiator location path time arrayMode
-                    let result, h' = accessGeneralizedHeap read heapOf term accessDefined (heapOf state)
-                    k (result, withHeap state h'))
-                Merging.merge Merging.merge2Terms id id
+            let doRead state k =
+                let accessDefined mapper lazyInstantiator groundHeap r h =
+                    commonHierarchicalHeapAccess read r updateDefined metadata groundHeap h mapper lazyInstantiator location path time arrayMode
+                let result, h' = accessGeneralizedHeap read heapOf term accessDefined (heapOf state)
+                k (result, withHeap state h')
+            if validate then
+                Common.statedConditionalExecution state
+                    (fun state k -> k (Arithmetics.simplifyEqual metadata addr (Concrete metadata [0] pointerType) id, state))
+                    (fun state k -> k (actionNull metadata state t))
+                    doRead
+                    Merging.merge Merging.merge2Terms id id
+            else doRead state id
         | StaticRef(location, path, None) ->
-            let accessDefined keyMapper valueMapper lazyInstantiator groundHeap r h =
-                commonHierarchicalStaticsAccess read r updateDefined metadata groundHeap h keyMapper valueMapper lazyInstantiator location path
+            let accessDefined mapper lazyInstantiator groundHeap r h =
+                commonHierarchicalStaticsAccess read r updateDefined metadata groundHeap h mapper lazyInstantiator location path
             let result, m' = accessGeneralizedHeap read staticsOf term accessDefined (staticsOf state)
             result, withStatics state m'
-        | Union gvs -> Merging.guardedStateMap (hierarchicalAccess read actionNull updateDefined metadata) gvs state
+        | Union gvs -> Merging.guardedStateMap (hierarchicalAccess validate read actionNull updateDefined metadata) gvs state
         | PointerTo viewType ->
             let ref = getReferenceFromPointer metadata term
-            let term, state = hierarchicalAccess read actionNull updateDefined metadata state ref
+            let term, state = hierarchicalAccess validate read actionNull updateDefined metadata state ref
             if typeOf term = viewType
             then term, state
             else __notImplemented__() // TODO: [columpio] [Reinterpretation]
@@ -605,20 +610,24 @@ module internal Memory =
         let stack = composeStacksOf ctx state state'
         let heap = composeHeapsOf ctx state state'.heap
         let statics = composeStaticsOf ctx state state'.statics
-        assert(state'.typeVariables |> snd |> Stack.isEmpty)
-        { stack = stack; heap = heap; statics = statics; frames = state.frames; pc = state.pc; typeVariables = state.typeVariables }
+//        assert(state'.typeVariables |> snd |> Stack.isEmpty)
+        let pc = List.map (fillHoles ctx state) state'.pc |> List.append state.pc
+        { stack = stack; heap = heap; statics = statics; frames = state.frames; pc = pc; typeVariables = state.typeVariables }
 
 // ------------------------------- High-level read/write -------------------------------
 
     and deref metadata state location =
-        hierarchicalAccess true npeTerm makePair metadata state location
+        hierarchicalAccess true true npeTerm makePair metadata state location
 
-    and derefWith actionNull metadata state location = hierarchicalAccess true actionNull makePair metadata state location
+    and derefWith actionNull metadata state location = hierarchicalAccess true true actionNull makePair metadata state location
+
+    and derefWithoutValidation metadata state location =
+        hierarchicalAccess false true (fun _ _ _ -> __unreachable__()) makePair metadata state location
 
     and mutate metadata state reference value =
         assert(value <> Nop)
         let time = tick()
-        hierarchicalAccess false npeTerm (fun _ _ -> (value, time)) metadata state reference
+        hierarchicalAccess true false npeTerm (fun _ _ -> (value, time)) metadata state reference
 
 // ------------------------------- Referencing -------------------------------
 
@@ -779,6 +788,11 @@ module internal Memory =
         interface IStatedSymbolicConstantSource with
             override x.SubTerms = Seq.singleton x.key
 
+    let (|StaticsInitializedSource|_|) (src : ISymbolicConstantSource) =
+        match src with
+        | :? staticsInitializedSource as li -> Some(li.heap, li.key)
+        | _ -> None
+
     let mutable counter = 0
     let private mkStaticKeyGuard mtd heap key =
         Constant mtd (IdGenerator.startingWith "hasKey#") ({heap = heap; key = key} : staticsInitializedSource) Bool
@@ -825,7 +839,7 @@ module internal Memory =
                         | _ -> __notImplemented__()
                     | None -> state
                 let loc = fillHoles ctx state x.location
-                deref ctx.mtd state' loc |> fst |> x.extractor.Extract
+                derefWithoutValidation ctx.mtd state' loc |> fst |> x.extractor.Extract
 
     type staticsInitializedSource with
         interface IStatedSymbolicConstantSource with

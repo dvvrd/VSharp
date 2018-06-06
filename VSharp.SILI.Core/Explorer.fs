@@ -72,7 +72,6 @@ module internal Explorer =
                         Memory.newStackFrame state metadata f fr
                     | None -> Memory.newScope metadata state fr) State.empty
                 let state = { state with pc = List.empty; frames = dlgt.ContextFrames}
-                // TODO: Create dummy frame
                 (None, state, false)
             | _ -> __notImplemented__()
         let state = if Option.isSome this then State.withPathCondition state (!!( Pointers.isNull metadata (Option.get this))) else state
@@ -131,7 +130,11 @@ module internal Explorer =
             let name = IdGenerator.startingWith <| sprintf "μ[%O]_" funcId
             let source = {id = funcId; state = state; name = name; typ = typ; location = None; extractor = IdTermExtractor()}
             let recursiveResult = Memory.makeSymbolicInstance mtd time source name typ |> ControlFlow.throwOrReturn
-            let recursiveState = { mutateStackClosure mtd funcId time state with heap = RecursiveApplication(funcId, addr, time); statics = RecursiveApplication(funcId, addr, time) }
+            let heapSymbol = RecursiveApplication(funcId, addr, time)
+            let ctx : compositionContext = { mtd = mtd; addr = addr; time = time }
+            let heap = Memory.composeHeapsOf ctx state heapSymbol
+            let statics = Memory.composeStaticsOf ctx state heapSymbol
+            let recursiveState = { mutateStackClosure mtd funcId time state with heap = heap; statics = statics }
             k (recursiveResult, recursiveState)
         else
             let ctx : compositionContext = { mtd = mtd; addr = addr; time = time }

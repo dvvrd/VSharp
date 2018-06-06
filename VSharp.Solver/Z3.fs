@@ -10,6 +10,11 @@ module internal Z3 =
 
 // ------------------------------- Cache -------------------------------
 
+    type private relation = foRelation
+    type private relationalApplication = foRelationalApplication
+    type private CHC = FOCHC
+    type private CHCSystem = FOCHCSystem
+
     type private encodingCache = {
         sorts : IDictionary<termType, Sort>
         e2t : IDictionary<Expr, term>

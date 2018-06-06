@@ -71,6 +71,8 @@ module API =
         let Constant name source typ = Constant m.Value name source typ
         let Expression op args typ = Expression m.Value op args typ
         let Struct fields typ = Struct m.Value fields typ
+        let HeapRef path time arrayTarget typ = HeapView m.Value path time arrayTarget typ
+        let StaticRef key path typ = StaticView m.Value key path typ
         let Union gvs = Union m.Value gvs
 
         let True = True
@@ -87,6 +89,8 @@ module API =
         let (|Lambda|_|) t = Lambdas.(|Lambda|_|) t
         let (|LazyInstantiation|_|) s = Memory.(|LazyInstantiation|_|) s
         let (|RecursionOutcome|_|) s = Explorer.(|RecursionOutcome|_|) s
+        let (|StaticsInitializedSource|_|) s = Memory.(|StaticsInitializedSource|_|) s
+        let (|SymbolicSubtypeSource|_|) s = Common.(|SymbolicSubtypeSource|_|) s
         let (|Conjunction|_|) term = Terms.(|Conjunction|_|) term.term
         let (|Disjunction|_|) term = Terms.(|Disjunction|_|) term.term
 

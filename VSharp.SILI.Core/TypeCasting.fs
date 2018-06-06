@@ -6,7 +6,6 @@ open VSharp.Core.Types.Constructor
 module internal TypeCasting =
 
     let rec primitiveCast mtd isChecked hierarchyCast targetType state term k =
-        // TODO: get rid of hierarchy cast parameter!
         match term.term with
         | Error _ -> k (term, state)
         | Nop -> internalfailf "casting void to %O!" targetType
