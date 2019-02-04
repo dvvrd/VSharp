@@ -1,15 +1,21 @@
 namespace VSharp
 
+open System.Collections.Generic
 open VSharp.Core
 
-type foRelation =
+type internal emptySource =
+    { id : string } with
+    interface INonComposableSymbolicConstantSource with
+        override x.SubTerms = seq[]
+
+type internal foRelation =
     { id : string; signature : termType list } with
     override x.ToString() = x.id
-type soRelation =
+type internal soRelation =
     { foRel : foRelation; relArgs : termType list list } with
     override x.ToString() = x.foRel.id
 
-type relArg =
+type internal relArg =
     | FoArg of foRelation
     | SoArg of soRelation * foRelation list * term list
     override x.ToString() =
@@ -22,13 +28,13 @@ type relArg =
         | FoArg _ -> []
         | SoArg(_, _, args)-> args
 
-type foRelationalApplication =
+type internal foRelationalApplication =
     { symbol : foRelation; args : term list } with
     override x.ToString() =
         let args = x.args |> List.map toString |> join ", "
         sprintf "%s(%s)" x.symbol.id args
 
-type soRelationalApplication =
+type internal soRelationalApplication =
     { symbol : soRelation; relArgs : relArg list; args : term list } with
     override x.ToString() =
         let soArgs = x.relArgs |> List.map toString
@@ -47,27 +53,57 @@ type 'a CHC =
         let body = List.append constraints apps
         sprintf "%s :- %s" head (join ", " body)
 
-type FOCHC = foRelationalApplication CHC
-type SOCHC = soRelationalApplication CHC
+type internal FOCHC = foRelationalApplication CHC
+type internal SOCHC = soRelationalApplication CHC
 
-type 'a CHCSystem = 'a list
-type FOCHCSystem = FOCHC CHCSystem
-type SOCHCSystem = SOCHC CHCSystem
+type internal 'a CHCSystem = 'a list
+type internal FOCHCSystem = FOCHC CHCSystem
+type internal SOCHCSystem = SOCHC CHCSystem
 
 module CHCs =
 
     let dump chcs = chcs |> List.map toString |> join "\n\n"
 
-    let private soRel2FoRel (rel : soRelation) =
-        if not rel.relArgs.IsEmpty then __notImplemented__()
-        assert(rel.relArgs.IsEmpty)
-        rel.foRel
+    let rec private addArgClauses (argRelations : IDictionary<_, _>) (argClauses : IDictionary<_, List<FOCHC>>) (sorel : soRelation) relArgs =
+        relArgs |> List.iteri (fun i arg ->
+            let headRel = argRelations.[sorel, i]
+            let headRelArgs = headRel.signature |> List.mapi (fun i -> let id = sprintf "$arg%d" i in Constant id {id = id})
+            let headApp = { symbol = headRel; args = headRelArgs }
+            // TODO: this is probably poor refinement typing! implement relatively complete algorithm
+            let bodyApp =
+                match arg with
+                | FoArg rel -> { symbol = rel; args = headRelArgs; }
+                | SoArg(rel, relArgs, args) ->
+                    addArgClauses argRelations argClauses rel (List.map FoArg relArgs)
+                    { symbol = rel.foRel; args = List.append args headRelArgs }
+            let argClause = { constraints = []; body = [bodyApp]; head = Some headApp }
+            argClauses.[sorel, i].Add(argClause))
 
-    let private app2FO (soapp : soRelationalApplication) : foRelationalApplication =
-        { symbol = soRel2FoRel soapp.symbol; args = soapp.args }
+    let private soApp2FO (argRelations : IDictionary<_, _>) (argClauses : IDictionary<_, _>) (soapp : soRelationalApplication) : foRelationalApplication =
+        addArgClauses argRelations argClauses soapp.symbol soapp.relArgs
+        { symbol = soapp.symbol.foRel; args = soapp.args }
 
-    let private chc2FO (sochc : SOCHC) : FOCHC =
-        { constraints = sochc.constraints; body = List.map app2FO sochc.body; head = Option.map app2FO sochc.head }
+    let private chc2FO (argRelations : IDictionary<_, _>) (argClauses : IDictionary<_, _>) (sochc : SOCHC) : FOCHC =
+        let app2FO = soApp2FO argRelations argClauses
+        { constraints = sochc.constraints; body = List.map app2FO sochc.body; head = Option.map (fun app -> { symbol = app.symbol.foRel; args = app.args }) sochc.head }
+
+    let private initArgRelations (clauses : SOCHCSystem) =
+        let argRelations = new Dictionary<soRelation * int, foRelation>()
+        let argClauses = new Dictionary<soRelation * int, List<FOCHC>>()
+        clauses |> List.iter (fun clause ->
+            match clause.head with
+            | Some head ->
+                head.relArgs |> List.iteri (fun i -> function
+                    | FoArg rel ->
+                        let key = (head.symbol, i)
+                        if not <| argRelations.ContainsKey key then
+                            argRelations.Add(key, rel)
+                            argClauses.Add(key, new List<FOCHC>())
+                    | SoArg _ -> __unreachable__())
+            | None -> ())
+        argRelations, argClauses
 
     let toFirstOrder (sys : SOCHCSystem) : FOCHCSystem =
-        List.map chc2FO sys
+        let argRelations, argClauses = initArgRelations sys
+        let clauses = List.map (chc2FO argRelations argClauses) sys
+        argClauses.Values |> Seq.concat |> List.ofSeq |> List.append clauses

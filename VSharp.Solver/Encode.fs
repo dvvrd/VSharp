@@ -4,8 +4,8 @@ open FSharpx.Collections
 open VSharp.Core
 open System.Collections.Generic
 
-type schemaId = obj
-type ISecondOrderArgId =
+type internal schemaId = obj
+type internal  ISecondOrderArgId =
     abstract GeneratePartialApplication : state -> schemaId * (unit -> term list * term list)
 
 type private schemaApp =
@@ -22,11 +22,6 @@ type private schema =
         mutable sotmp2 : ISet<ISecondOrderArgId * termType list * termType>; sosubsts : ISet<ISecondOrderArgId * term list * term>;
         foinputs : ISet<term>; mutable fotmp1 : ISet<term>; mutable fotmp2 : ISet<term>; // TODO: do we need fotmp2?
     }
-
-type internal emptySource =
-    { id : string } with
-    interface INonComposableSymbolicConstantSource with
-        override x.SubTerms = seq[]
 
 
 module internal Encode =
@@ -356,7 +351,8 @@ module internal Encode =
                 List.unzip gapps |> mapper) |> List.ofSeq
 
     let private schema2FoRel (schema : schema) : foRelation =
-        { id = schema.id.ToString(); signature = Seq.map TypeOf schema.foinputs |> List.ofSeq }
+        let args = List.append3 (List.ofSeq schema.foinputs) schema.parameterInputs schema.results
+        { id = schema.id.ToString(); signature = Seq.map TypeOf args |> List.ofSeq }
 
     let soRels = persistent((fun () -> new Dictionary<schemaId, soRelation>()), id)
     let foRels = persistent((fun () -> new Dictionary<schemaId * ISecondOrderArgId, foRelation>()), id)
@@ -364,7 +360,7 @@ module internal Encode =
     let private schema2Rel (schema : schema) =
         let mapArg (argId, domain, typ) =
             let signature = List.append domain [typ]
-            let argSchema = { id = "tau_" + toString argId; signature = signature }
+            let argSchema = { id = "tau_" + toString argId + (hash schema.id |> toString); signature = signature }
             foRels.Value.Add((schema.id, argId), argSchema)
             signature
         let relArgs = schema.soinputs |> Seq.map mapArg |> List.ofSeq

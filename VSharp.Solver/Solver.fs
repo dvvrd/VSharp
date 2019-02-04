@@ -15,8 +15,9 @@ type public IZ3Solver =
 type public Z3Solver() =
     interface IZ3Solver with
         member x.Solve terms =
-            let hochcs = Encode.encodeQuery terms
-            let chcs = CHCs.toFirstOrder hochcs
+            let sochcs = Encode.encodeQuery terms
+            printfn "\n\n\n ------------------------------ SOCHCS -------------------------------------\n\n%s\n\n\n" (CHCs.dump sochcs)
+            let chcs = CHCs.toFirstOrder sochcs
             Z3.solve chcs
 
 type public Z3Simplifier() =
