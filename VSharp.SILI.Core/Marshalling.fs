@@ -320,6 +320,7 @@ module internal Marshalling =
         | _ -> false
 
     let callViaReflection mtd state (funcId : IFunctionIdentifier) (this : term option) (parameters : term list symbolicValue) k =
+        Logger.trace "Calling concrete %O" funcId
         let k x =
             if physical2virtual.Count <> virtual2physical.Count then __unreachable__()
             clearMappings()
@@ -350,7 +351,7 @@ module internal Marshalling =
                 let marshaledThis = marshal mtd state this
                 let resultObj = method.Invoke(marshaledThis, marshaledArgs)
                 let state = unmarshalUnknownLocation mtd state marshaledThis |> snd
-                Logger.printLog Logger.Error "type of result = %O" (method.ReturnType)
+                Logger.error "type of result = %O" (method.ReturnType)
                 resultObj, method.ReturnType = typedefof<Void>, state
             | m -> internalfailf "Expected ConstructorInfo or MethodInfo, but got %O" <| m.GetType()
         let state = Seq.fold (fun state obj -> unmarshalUnknownLocation mtd state obj |> snd) state marshaledArgs

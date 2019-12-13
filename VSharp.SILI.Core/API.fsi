@@ -50,8 +50,8 @@ module API =
         val BaseTypeOfRef : term -> termType
         val SightTypeOfRef : term -> termType
 
-        val isStruct : term -> bool
-        val isReference : term -> bool
+        val IsStruct : term -> bool
+        val IsReference : term -> bool
         val IsNullReference : term -> term
 
         val (|True|_|) : term -> unit option

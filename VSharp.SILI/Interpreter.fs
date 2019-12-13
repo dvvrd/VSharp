@@ -29,7 +29,7 @@ type public CodePortionInterpreter(ilInterpreter : ILInterpreter, codeLoc : ICod
             |> getResultAndState |> k
         match codeLoc with
         | :? ILMethodMetadata ->
-            Logger.printLog Logger.Info "Starting exploring method %O" codeLoc
+            Logger.info "Starting exploring method %O" codeLoc
             ilInterpreter.InitEntryPoint state cfg.methodBase.DeclaringType (fun state ->
             interpret state (Intermediate 0) destination.Return [])
         | :? ILCodePortion as ilcode ->
@@ -349,7 +349,7 @@ and public ILInterpreter() as this =
                 let k1 (value, state) = k [value, {cilState with state = state}]
                 let fieldType = fieldInfo.FieldType |> Types.FromDotNetType state
                 let fullName = getFullNameOfField fieldInfo
-                match addressNeeded, isStruct target with
+                match addressNeeded, IsStruct target with
                 | false, true -> k1 (Memory.ReadBlockField target fullName fieldType, state)
                 | false, false -> Memory.ReferenceField target fullName fieldType |> Memory.Dereference state |> k1
                 | true, _ -> k1 (Memory.ReferenceField target fullName fieldType, state)
@@ -407,12 +407,13 @@ and public ILInterpreter() as this =
         | _ -> __notImplemented__()
     member private x.UnboxCommon (op : OpCode) handleReferenceType handleRestResults (cfg : cfgData) offset (cilState : cilState) =
         let t = resolveTypeFromMetadata cfg (offset + op.Size)
+        Logger.trace "UnboxCommon %O" t
         let termType = Types.FromDotNetType cilState.state t
         let InvalidCastException state = RuntimeExceptions.InvalidCastException state id
         match cilState.opStack with
         | _ :: _ when t.IsGenericParameter -> __notImplemented__() //TODO: Nullable.GetUnderlyingType for generics
         | obj :: stack ->
-            assert(isReference obj)
+            assert(IsReference obj)
             let nullCase (cilState : cilState) =
                 StatedConditionalExecutionCIL cilState
                     (fun state k -> k (Types.TypeIsNullable termType, state))
@@ -438,13 +439,14 @@ and public ILInterpreter() as this =
                     (fun state k -> k (Types.TypeIsNullable termType, state))
                     canCastValueTypeToNullableTargetCase
                     (fun cilState k -> k [handleRestResults(castUnchecked termType obj cilState.state fst, cilState)])
-                    (fun error -> (error, {cilState with exceptionFlag = Some error}) :: [])
+                    (fun error -> [error, {cilState with exceptionFlag = Some error}])
             let valueTypeCase (cilState : cilState) =
+                Logger.trace "Unbox.any: value type case %O [%O]" obj (TypeOf obj)
                 StatedConditionalExecutionCIL cilState
                     (fun state k -> k (Types.CanCast obj termType, state))
                     canCastValueTypeToTargetCase
                     (x.Raise InvalidCastException)
-                    (fun error -> (error, {cilState with exceptionFlag = Some error}) :: [])
+                    (fun error -> [error, {cilState with exceptionFlag = Some error}])
             let nonNullCase (cilState : cilState) =
                 let SystemValueType = Types.FromDotNetType cilState.state typedefof<System.ValueType>
                 StatedConditionalExecutionCIL cilState
@@ -464,6 +466,7 @@ and public ILInterpreter() as this =
     member private x.UnboxAny (cfg : cfgData) offset (cilState : cilState) =
         let InvalidCastException state = RuntimeExceptions.InvalidCastException state id
         let handleReferenceTypeResults obj termType cilState =
+            Logger.trace "Unbox.any: reference type case %O [%O]" obj  (TypeOf obj)
             StatedConditionalExecutionCIL cilState
                 (fun state k -> k (Types.CanCast obj termType, state))
                 (fun cilState k -> k [castUnchecked termType obj cilState.state fst, cilState])
@@ -493,7 +496,7 @@ and public ILInterpreter() as this =
     override x.MakeMethodIdentifier m = { methodBase = m } :> IMethodIdentifier
     member x.ExecuteInstruction (cfg : cfgData) (offset : int) (cilState : cilState) =
         let opcode = Instruction.parseInstruction cfg.ilBytes offset
-        Logger.printLog Logger.Trace "Executing instruction %O of %O [%O]" opcode cfg.methodBase cfg.methodBase.DeclaringType
+        Logger.trace "Executing instruction %O of %O [%O]" opcode cfg.methodBase cfg.methodBase.DeclaringType
         let nextTargets = Instruction.findNextInstructionOffsetAndEdges opcode cfg.ilBytes offset
         let newOffsets =
             match nextTargets with

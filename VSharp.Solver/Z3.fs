@@ -220,11 +220,11 @@ module internal Z3 =
         let context = new EncodingContext()
         ctxs.Push(context)
         try
-            printLog Info "SOLVER: trying to solve CHC system..."
-            printLogLazy Trace "%O" (lazy(system |> List.map toString |> join "\n"))
+            info "SOLVER: trying to solve CHC system..."
+            traceLazy "%O" (lazy(system |> List.map toString |> join "\n"))
             let failRel = encodeSystem system
             let result = (ctx()).FP.Query(failRel)
-            printLog Trace "SOLVER: got %O" result
+            trace "SOLVER: got %O" result
             match result with
             | Status.SATISFIABLE -> SmtSat null
             | Status.UNSATISFIABLE -> SmtUnsat
@@ -248,10 +248,7 @@ module internal Z3 =
         try
             let encoded = encodeTermExt stopper t
             let simple = encoded.Simplify()
-            let result = decode simple
-            printLog Trace "SOLVER: simplification of %O   gave   %O" t result
-            printLog Trace "SOLVER: on SMT level encodings are %O    and     %O" encoded simple
-            result
+            decode simple
         finally
             ctxs.Pop() |> ignore
             context.Dispose()

@@ -28,9 +28,14 @@ type public Z3Solver() =
         member x.Solve terms =
             if haveRecursiveCall terms then SmtUnknown null
             else
-                let hochcs = Encode.encodeQuery terms
-                let chcs = CHCs.toFirstOrder hochcs
-                Z3.solve chcs
+                try
+                    let hochcs = Encode.encodeQuery terms
+                    let chcs = CHCs.toFirstOrder hochcs
+                    Z3.solve chcs
+                with
+                    | e when e.ToString().Contains("Database") ->
+                        Logger.error "Exception during encoding! %O" e.Message
+                        SmtSat null
 
 type public Z3Simplifier() =
     interface IPropositionalSimplifier with

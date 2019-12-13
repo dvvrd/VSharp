@@ -180,7 +180,7 @@ module internal State =
     let withPathCondition (s : state) cond : state = { s with pc = cond::s.pc }
     let popPathCondition (s : state) : state =
         match s.pc with
-        | [] -> internalfail "cannot pop empty path condition"
+        | [] -> s//internalfail "cannot pop empty path condition"
         | _::p' -> { s with pc = p' }
 
     let stackOf (s : state) = s.stack

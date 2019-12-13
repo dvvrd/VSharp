@@ -194,7 +194,7 @@ module internal InstructionsSet =
         Memory.ReferenceLocalVariable (ParameterKey pi), state
 
     let castToType isChecked typ term state k =
-        if isReference term && Types.IsPointer typ then
+        if IsReference term && Types.IsPointer typ then
             let ptr = Types.CastReferenceToPointer state term // TODO: casting to pointer is weird
             Types.Cast state ptr typ isChecked (fun st _ _ -> RuntimeExceptions.InvalidCastException st Error) k
         else
@@ -321,8 +321,8 @@ module internal InstructionsSet =
         | t when t = TypeUtils.int32Type -> term !== TypeUtils.Int32.Zero
         | Numeric(Id t) when t.IsEnum ->
             term !== MakeNumber (t.GetEnumValues().GetValue(0))
-        | _ when isReference term -> term !== MakeNullRef()
-        | _ -> __notImplemented__()
+        | _ when IsReference term -> term !== MakeNullRef()
+        | _ -> Logger.trace "ConcreteTerm2BooleanTerm: %O [%O]" term (TypeOf term);  __notImplemented__()
     let ceq (cilState : cilState) =
         match cilState.opStack with
         | y :: x :: _ ->
@@ -496,6 +496,7 @@ module internal InstructionsSet =
     let ldelemWithCast cast (cilState : cilState) : cilState list =
         match cilState.opStack with
         | index :: arrayRef :: stack ->
+            // [dvvrd] TODO: what if arrayRef is null?
             let reference, state = Memory.ReferenceArrayIndex cilState.state arrayRef [index]
             let value, state = Memory.Dereference state reference
             cast value state (pushResultOnStack {cilState with opStack = stack} >> List.singleton)
@@ -519,7 +520,7 @@ module internal InstructionsSet =
         let ancestorMethodBase = resolveMethodFromMetadata cfg (offset + OpCodes.Ldvirtftn.Size)
         match cilState.opStack with
         | this :: stack ->
-            assert(isReference this)
+            assert(IsReference this)
             let t = this |> SightTypeOfRef |> Types.ToDotNetType
             let methodInfo = t.GetMethod(ancestorMethodBase.Name, allBindingFlags)
             let methodPtr = Terms.Concrete methodInfo (Types.FromDotNetType cilState.state (methodInfo.GetType()))
@@ -575,7 +576,7 @@ module internal InstructionsSet =
         | _ -> __notImplemented__()
     let cgtun (cilState : cilState) =
         match cilState.opStack with
-        | arg2 :: arg1 :: _ when isReference arg2 && isReference arg1 ->
+        | arg2 :: arg1 :: _ when IsReference arg2 && IsReference arg1 ->
             compare OperationType.NotEqual idTransformation idTransformation cilState
         | _ -> compare OperationType.Greater makeUnsignedInteger makeUnsignedInteger cilState
     let ldobj (cfg : cfgData) offset (cilState : cilState) =
@@ -826,7 +827,7 @@ module internal InstructionsSet =
     opcode2Function.[hashFunction OpCodes.Ldelema]            <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
     opcode2Function.[hashFunction OpCodes.Ldelem_I]           <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
     opcode2Function.[hashFunction OpCodes.Leave]              <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
-    opcode2Function.[hashFunction OpCodes.Leave_S]            <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
+    opcode2Function.[hashFunction OpCodes.Leave_S]            <- zipWithOneOffset <| (fun _ _ st -> [st])//Prelude.__notImplemented__())
     opcode2Function.[hashFunction OpCodes.Mkrefany]           <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
     opcode2Function.[hashFunction OpCodes.Prefix1]            <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())
     opcode2Function.[hashFunction OpCodes.Prefix2]            <- zipWithOneOffset <| (fun _ _ _ -> Prelude.__notImplemented__())

@@ -38,8 +38,7 @@ and public weakdict<'key, 'value when 'key : not struct and 'key : equality and 
         if key.TryGetTarget(target) then
             !target |> alive
         else
-//            Logger.printLog Logger.Trace "FREE"
-//            this.Free key
+            this.Free key
             dead
 
     member internal x.Remove key =

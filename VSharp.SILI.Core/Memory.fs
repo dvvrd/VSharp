@@ -792,17 +792,20 @@ module internal Memory =
         k (conjunction mtd bounds |> unguard |> merge, state'')))
 
     let referenceArrayIndex metadata state arrayRef (indices : term list) =
-        let reference state arrayRef =
-            let elemType = baseTypeOfRef arrayRef |> elementType // TODO: add getting type of StackRef when stackalloc will be implemented
-            Common.statedConditionalExecutionWithMerge state
-                (fun state k -> checkIndices metadata state arrayRef indices k)
-                (fun state k ->
-                    let location = Arrays.makeIndexArray metadata (fun i -> indices.[i]) indices.Length
-                    let result = referenceSubLocations arrayRef [ArrayIndex(location, elemType)]
-                    k (result, state))
-                (fun state k ->
-                    let exn, state = State.createInstance metadata typeof<System.IndexOutOfRangeException> [] state
-                    k (Error metadata exn, state))
+        Logger.trace "!!! referenceArrayIndex, ref: %O" arrayRef
+        let reference state = function
+            | {term = Ref(RefNullAddress, _) } as arrayRef -> (arrayRef, state)
+            | arrayRef ->
+                Common.statedConditionalExecutionWithMerge state
+                    (fun state k -> checkIndices metadata state arrayRef indices k)
+                    (fun state k ->
+                        let location = Arrays.makeIndexArray metadata (fun i -> indices.[i]) indices.Length
+                        let elemType = baseTypeOfRef arrayRef |> elementType // TODO: add getting type of StackRef when stackalloc will be implemented
+                        let result = referenceSubLocations arrayRef [ArrayIndex(location, elemType)]
+                        k (result, state))
+                    (fun state k ->
+                        let exn, state = State.createInstance metadata typeof<System.IndexOutOfRangeException> [] state
+                        k (Error metadata exn, state))
         guardedErroredStatedApply reference state arrayRef
 
 // ------------------------------- State layer -------------------------------

@@ -631,14 +631,17 @@ module internal Terms =
 
     let rec isStruct term = // TODO: use common function
         match term.term with
+        | Error _
         | Struct _ -> true
         | Union gvs -> List.forall (snd >> isStruct) gvs
         | _ -> false
 
     let rec isReference term =
         match term.term with
+        | Error _
+        | Ref _ -> true
         | Union gvs -> List.forall (snd >> isReference) gvs
-        | _ -> isRef term
+        | _ -> false
 
     let CastConcrete isChecked (value : obj) (t : System.Type) metadata =
         let actualType = if box value = null then t else value.GetType()

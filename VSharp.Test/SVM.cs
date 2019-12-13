@@ -27,7 +27,7 @@ namespace VSharp.Test
             if (methodIdentifier == null)
             {
                 var format = new PrintfFormat<string, Unit, string, Unit>($"WARNING: metadata method for {m.Name} not found!");
-                Logger.printLog(Logger.Warning, format);
+                Logger.warning(format);
                 return null;
             }
             dict?.Add(m, null);
@@ -46,7 +46,7 @@ namespace VSharp.Test
             if (methodIdentifier == null)
             {
                 var format = new PrintfFormat<string, Unit, string, Unit>($"WARNING: metadata method for {m.Name} not found!");
-                Logger.printLog(Logger.Warning, format);
+                Logger.warning(format);
                 return null;
             }
             dict?.Add(m, null);
@@ -64,7 +64,7 @@ namespace VSharp.Test
             {
                 var str = string.Format(@"For method {0} got exception {1}", m, e);
                 PrintfFormat<Unit, Unit, string, Unit> printfFormat = new PrintfFormat<Unit, Unit, string, Unit>(str);
-                Logger.printLog(Logger.Error, printfFormat);
+                Logger.error(printfFormat);
                 return null;
             }
         }
@@ -143,7 +143,7 @@ namespace VSharp.Test
             {
                 var str = string.Format(@"For method {0} got summary {1}", p.Key, ResultToString(p.Value));
                 PrintfFormat<Unit, Unit, string, Unit> printfFormat = new PrintfFormat<Unit, Unit, string, Unit>(str);
-                Logger.printLog(Logger.Info, printfFormat);
+                Logger.info(printfFormat);
             }
 
             return dictionary.ToDictionary(kvp => kvp.Key, kvp => ResultToString(kvp.Value));

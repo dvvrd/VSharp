@@ -67,8 +67,8 @@ module API =
         let BaseTypeOfRef ref = baseTypeOfRef ref
         let SightTypeOfRef ref = sightTypeOfRef ref
 
-        let isStruct term = isStruct term
-        let isReference term = isReference term
+        let IsStruct term = isStruct term
+        let IsReference term = isReference term
         let IsNullReference term = Pointers.isNull m.Value term
 
         let (|True|_|) t = (|True|_|) t
