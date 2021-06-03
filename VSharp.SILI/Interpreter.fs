@@ -27,17 +27,17 @@ type public MethodInterpreter(searcher : ForwardSearcher (*ilInterpreter : ILInt
            | SolverInteraction.SmtUnsat _ -> false
            | _ -> true
         let validStates = List.filter isValid finishedStates
-        let printInfoForDebug () =
-            let allStatesInQueue = q.GetStates()
-            Logger.info "No states were obtained. Most likely such a situation is a bug. Check it!"
-            Logger.info "Indexed queue size = %d\n" (List.length allStatesInQueue)
-            List.iteri (fun i -> dump >> Logger.info "Queue.[%d]:\n%s\n" i) allStatesInQueue
-            true
+//        let printInfoForDebug () =
+//            let allStatesInQueue = q.GetStates()
+//            Logger.info "No states were obtained. Most likely such a situation is a bug. Check it!"
+//            Logger.info "Indexed queue size = %d\n" (List.length allStatesInQueue)
+//            List.iteri (fun i -> dump >> Logger.info "Queue.[%d]:\n%s\n" i) allStatesInQueue
+//            true
         match iieStates with // TODO: write error states? #do
         | CilStateWithIIE iie :: _ -> raise iie
         | _ :: _ -> __unreachable__()
         | _ when validStates = [] ->
-            assert(printInfoForDebug())
+//            assert(printInfoForDebug())
             internalfailf "No states were obtained. Most likely such a situation is a bug. Check it!"
         | _ -> validStates
 
@@ -1216,7 +1216,7 @@ and public ILInterpreter(methodInterpreter : ExplorerBase) as this =
         makeStep' (currentIp cilState) id
 
     member private x.ExecuteInstruction m offset (cilState : cilState) =
-        Logger.trace "ExecuteInstruction:\n%s" (dump cilState)
+//        Logger.trace "ExecuteInstruction:\n%s" (dump cilState)
         let cfg = CFG.findCfg m
         let opCode = parseInstruction m offset
 //        let newIps = moveIp cilState |> List.map (fun cilState -> cilState.ipStack)

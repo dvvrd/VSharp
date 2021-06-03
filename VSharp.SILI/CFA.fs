@@ -349,17 +349,17 @@ module public CFA =
         inherit Edge(src, dst)
         override x.Type = "StepEdge"
         override x.PropagatePath (cilState : cilState) =
-            let print cilStates =
-                x.PrintLog "composition left"  <| dump cilState
-                x.PrintLog "composition right" <| dump effect
-                List.iter (dump >> x.PrintLog (sprintf "composition resulted")) cilStates
+//            let print cilStates =
+//                x.PrintLog "composition left"  <| dump cilState
+//                x.PrintLog "composition right" <| dump effect
+//                List.iter (dump >> x.PrintLog (sprintf "composition resulted")) cilStates
             let cilStates = compose cilState effect
             // Do NOT turn this List.forall into List.exists to be sure that EVERY returned state is propagated
             assert(List.forall (fun (cilState' : cilState) -> cilState'.state.stack = cilState.state.stack) cilStates)
             let goodStates = List.filter (stateOf >> x.CommonFilterStates) cilStates
             if List.length goodStates <> List.length cilStates
                 then Logger.trace "Some states were not propagated from %O to %O" src.Ip cilState.ipStack
-            print goodStates
+//            print goodStates
             goodStates
 
         member x.Effect = effect
@@ -379,8 +379,8 @@ module public CFA =
                     let initialState = cilStateBeforeCall.state
                     assert(initialState.stack = resultState.stack)
                     x.PrintLog "propagation through callEdge" callSite
-                    x.PrintLog "call edge: composition left" (dump cilStateBeforeCall)
-                    x.PrintLog "call edge: composition result" (dump resultCilState)
+//                    x.PrintLog "call edge: composition left" (dump cilStateBeforeCall)
+//                    x.PrintLog "call edge: composition result" (dump resultCilState)
                     let stateAfterCall =
                         let _, evaluationStack = EvaluationStack.PopArguments numberToDrop initialState.evaluationStack
                         match resultState.returnRegister with
@@ -717,10 +717,10 @@ type CFASearcher(maxBound) =
                 let conditions = [isIIEState; isUnhandledError; x.Used; isExecutable >> not]
                 conditions |> List.fold (fun acc f -> acc || f s) false |> not
 
-            let states = states |> List.filter canBePropagated
+            let states = states |> Seq.filter canBePropagated
             match states with
-            | x :: _ -> Some x
-            | [] -> None
+            | Seq.Cons(x, _) -> Some x
+            | Seq.Empty -> None
 
 type EffectsFirstSearcher(maxBound) =
     inherit ForwardSearcher(maxBound)
@@ -735,11 +735,11 @@ type EffectsFirstSearcher(maxBound) =
             let conditions = [isIIEState; isUnhandledError; x.Used; isExecutable >> not]
             conditions |> List.fold (fun acc f -> acc || f s) false |> not
 
-        let states = all |> List.filter canBePropagated
+        let states = all |> Seq.filter canBePropagated
 
         match states with
-        | [] -> None
-        | s :: _ when x.ShouldStartExploringInIsolation (all, s) ->
+        | Seq.Empty -> None
+        | Seq.Cons(s, _) when x.ShouldStartExploringInIsolation (all, s) ->
             try
                 let currentIp = currentIp s
                 let m = currentMethod currentIp
@@ -748,15 +748,15 @@ type EffectsFirstSearcher(maxBound) =
                 Some cilStateForComposition
             with
             | :? InsufficientInformationException -> Some s
-        | s :: _ -> Some s
-    abstract member ShouldStartExploringInIsolation: cilState list  * cilState -> bool
+        | Seq.Cons(s, _) -> Some s
+    abstract member ShouldStartExploringInIsolation: cilState seq * cilState -> bool
     default x.ShouldStartExploringInIsolation (_,_) = false
 
 type AllMethodsExplorationSearcher(maxBound) =
     inherit EffectsFirstSearcher(maxBound)
     override x.ShouldStartExploringInIsolation (states, s) =
         match currentIp s with
-        | Instruction(0, _) as ip when states |> List.filter (startingIpOf >> (=) ip) |> List.length = 0 -> true
+        | Instruction(0, _) as ip when states |> Seq.filter (startingIpOf >> (=) ip) |> Seq.length = 0 -> true
         | _ -> false
 
 type ParameterlessMethodsExplorationSearcher(maxBound) =

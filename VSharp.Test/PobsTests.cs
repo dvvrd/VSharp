@@ -87,7 +87,7 @@ namespace VSharp.Test
                 // new BFSSearcher(maxBound)
                 new TargetedSearcher(maxBound)
                 , new DFSSearcher(maxBound)
-                , new BFSSearcher(maxBound)
+                // , new BFSSearcher(maxBound)
             };
 
             bool allWitnessed = true;

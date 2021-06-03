@@ -36,12 +36,12 @@ type SearchDirection =
     | GoBackward of pob * cilState
 
 type INewSearcher =
-    abstract member ChooseAction : list<cilState> * list<pob * cilState> * pob list * IFunctionIdentifier -> SearchDirection
+    abstract member ChooseAction : cilState seq * (pob * cilState) seq * pob seq * IFunctionIdentifier -> SearchDirection
     abstract member CanReach : ip stack * ip * ip list -> bool
     abstract member Reset : unit -> unit
 //    abstract member ClosePob : pob -> unit
     abstract member Init : MethodBase * codeLocation list -> unit
-    abstract member AppendNewStates : list<cilState> -> unit
+    abstract member AppendNewStates : cilState seq -> unit
     abstract member MaxBound : int
 
 [<AbstractClass>]
@@ -59,17 +59,17 @@ type ForwardSearcher(maxBound) = // TODO: max bound is needed, when we are in re
         override x.AppendNewStates _ = ()
         override x.ChooseAction(fq, bq, pobs, mainId) =
             match fq, bq with
-            | _, ps :: _ -> GoBackward ps
-            | [], [] when stepsNumber = 0u -> Start <| Instruction(0, mainId.Method)
-            | _, [] ->
+            | _, Seq.Cons(ps, _) -> GoBackward ps
+            | Seq.Empty, Seq.Empty when stepsNumber = 0u -> Start <| Instruction(0, mainId.Method)
+            | _, Seq.Empty ->
                 match x.PickNext fq with
                 | None -> Stop
                 | Some s ->
                     stepsNumber <- stepsNumber + 1u
                     GoForward s
 
-    abstract member PickNext : cilState list -> cilState option
-    default x.PickNext (qf : cilState list) = None
+    abstract member PickNext : cilState seq -> cilState option
+    default x.PickNext (qf : cilState seq) = None
     member x.Used (cilState : cilState) =
         let maxBound : int = (x :> INewSearcher).MaxBound
         match currentIp cilState with
@@ -86,18 +86,17 @@ type BFSSearcher(maxBound) =
         override x.PickNext fq =
             let canBePropagated (s : cilState) =
                 not (isIIEState s || isUnhandledError s) && isExecutable s && not (x.Used s)
-            let states = fq |> List.filter canBePropagated
+            let states = fq |> Seq.filter canBePropagated
             match states with
-            | x :: _ -> Some x
-            | [] -> None
+            | Seq.Cons(x, _) -> Some x
+            | Seq.Empty -> None
 
 type DFSSearcher(maxBound) =
     inherit ForwardSearcher(maxBound) with
         override x.PickNext fq =
             let canBePropagated (s : cilState) =
                 not (isIIEState s || isUnhandledError s) && isExecutable s && not (x.Used s)
-            let states = fq |> List.filter canBePropagated
+            let states = fq |> Seq.filter canBePropagated
             match states with
-            | _ :: _ -> List.last states |> Some
-            | [] -> None
-
+            | Seq.Cons(_, _) -> Seq.last states |> Some
+            | Seq.Empty -> None

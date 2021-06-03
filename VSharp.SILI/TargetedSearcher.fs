@@ -164,7 +164,7 @@ type OneTargetedSearcher(maxBound, target : codeLocation, cfg, reachableLocation
         override x.MaxBound = maxBound
         override x.AppendNewStates states =
 //            List.iter (fun s -> if comparer.CanReach(s.ipStack, []) then priorityQueue.Add s |> ignore) states
-            List.iter (fun s -> priorityQueue.Add s |> ignore) states
+            Seq.iter (fun s -> priorityQueue.Add s |> ignore) states
         override x.Reset() =
             Logger.warning "steps number done by %O = %d" (x.GetType()) stepsNumber
             stepsNumber <- 0u
@@ -281,7 +281,7 @@ type TargetedSearcher(maxBound) =
 
             let canBePropagated (s : cilState) =
                 not (isIIEState s || isUnhandledError s) && isExecutable s
-            let states = states |> List.filter canBePropagated
+            let states = states |> Seq.filter canBePropagated
             Option.map (appendStateToSearcher states) currentSearcher |> ignore
         override x.Init(mainM, locs) =
             let createSearcher () =
@@ -334,11 +334,11 @@ type TargetedSearcher(maxBound) =
 //                        Some s
 
             match qf, qb, pobs with
-            | [], _, _ when stepsNumber = 0u -> Start(Instruction(0, mainId.Method))
-            | _, ((p, s) as b) ::_, _ ->
+            | Seq.Empty, _, _ when stepsNumber = 0u -> Start(Instruction(0, mainId.Method))
+            | _, Seq.Cons(b, _), _ ->
                 GoBackward(b)
-            | _, _, [] -> Stop
-            | _, [], p :: _ ->
+            | _, _, Seq.Empty -> Stop
+            | _, Seq.Empty, Seq.Cons(p, _) ->
                 let ploc = MyUtils.ip2codeLocation p.loc |> Option.get
                 if  ploc = currentLoc then
                     tryFindState()

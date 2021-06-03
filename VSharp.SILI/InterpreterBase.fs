@@ -284,11 +284,11 @@ type public ExplorerBase() =
             else k
 
         x.Explore newFuncId (Seq.map (fun summary ->
-            Logger.trace "ExploreAndCompose: Original CodeLoc = %O New CodeLoc = %O\ngot summary state = %s" funcId newFuncId (dump summary.cilState)
-            Logger.trace "ExploreAndCompose: Left state = %s" (dump cilState)
+//            Logger.trace "ExploreAndCompose: Original CodeLoc = %O New CodeLoc = %O\ngot summary state = %s" funcId newFuncId (dump summary.cilState)
+//            Logger.trace "ExploreAndCompose: Left state = %s" (dump cilState)
             let summaryCilState = withCurrentTime [] summary.cilState
             let resultStates = compose cilState summaryCilState
-            List.iter (dump >> (Logger.trace "ExploreAndCompose: Result after composition %s")) resultStates
+//            List.iter (dump >> (Logger.trace "ExploreAndCompose: Result after composition %s")) resultStates
             resultStates) >> List.ofSeq >> List.concat >> k)
 
     abstract member AnswerPobs : IFunctionIdentifier -> codeLocation list -> (IDictionary<codeLocation, string> -> 'a) -> 'a
